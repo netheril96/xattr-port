@@ -7,6 +7,7 @@ import (
 	"path/filepath" // For directory walking and relative path calculation
 
 	"github.com/pkg/xattr" // For extended attribute operations (e.g., github.com/pkg/xattr)
+	"github.com/rs/zerolog/log"
 )
 
 // ExportXattrs recursively walks the given rootDir, reads extended attributes
@@ -36,16 +37,19 @@ func ExportXattrs(rootDir string, db *sql.DB) error {
 		if err != nil {
 			// This can happen if xattrs are not supported or due to permissions.
 			// Depending on requirements, one might log this and continue.
-			// xattr.List returns an empty slice and nil error if no xattrs exist.
-			return fmt.Errorf("failed to list xattrs for %s: %w", currentPath, err)
+			// xattr.LList returns an empty slice and nil error if no xattrs exist.
+			log.Error().Err(err).Str("path", currentPath).Msg("Failed to list xattrs")
+			return nil // Continue walking other files/directories
 		}
 
 		for _, attrName := range attrNames {
 			attrValue, err := xattr.LGet(currentPath, attrName)
 			if err != nil {
-				return fmt.Errorf("failed to get xattr '%s' for %s: %w", attrName, currentPath, err)
+				log.Error().Err(err).Str("path", currentPath).Str("attrName", attrName).Msg("Failed to get xattr")
+				continue // Continue with the next attribute for this file
 			}
 
+			// If inserting into DB fails, we still return that error as it's not an xattr.XXX method error.
 			if err := InsertXattrRow(db, relativePath, attrName, attrValue); err != nil {
 				return fmt.Errorf("failed to insert xattr for %s (name: %s): %w", relativePath, attrName, err)
 			}
@@ -64,7 +68,8 @@ func ImportXattrs(rootDir string, db *sql.DB) error {
 		fullPath := filepath.Join(rootDir, relativePath)
 
 		if err := xattr.LSet(fullPath, xattrName, xattrValue); err != nil {
-			return fmt.Errorf("failed to set xattr '%s' on %s: %w", xattrName, fullPath, err)
+			log.Error().Err(err).Str("path", fullPath).Str("attrName", xattrName).Msg("Failed to set xattr")
+			return nil // Continue with the next xattr from the database
 		}
 		return nil
 	}
