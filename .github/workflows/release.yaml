@@ -1,0 +1,30 @@
+name: gorelease
+on:
+  push:
+    tags:
+      - 'v*' # Matches tags like v1.0, v1.2.3
+
+permissions:
+  contents: write # Required to create a GitHub release and upload assets
+
+jobs:
+  goreleaser:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches all history for all branches and tags, required by GoReleaser
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable' # Use the latest stable Go version, or specify e.g., '1.22'
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          args: release --clean # '--clean' is optional but recommended
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
